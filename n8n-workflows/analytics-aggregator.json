@@ -1,0 +1,116 @@
+{
+  "name": "Analytics Aggregator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_BASE_URL }}/api/v1/executions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-executions",
+      "name": "Fetch All Executions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const executions = $input.all();\nconst today = new Date().toISOString().split('T')[0];\n\nlet totalExecutions = 0;\nlet successfulExecutions = 0;\nlet failedExecutions = 0;\nconst platformStats = {};\n\nexecutions.forEach(item => {\n  const exec = item.json;\n  totalExecutions++;\n  \n  if (exec.status === 'success') {\n    successfulExecutions++;\n  } else if (exec.status === 'failed') {\n    failedExecutions++;\n  }\n  \n  const platform = exec.data?.platform || 'unknown';\n  platformStats[platform] = (platformStats[platform] || 0) + 1;\n});\n\nconst successRate = totalExecutions > 0 \n  ? (successfulExecutions / totalExecutions) * 100 \n  : 0;\n\nreturn {\n  date: today,\n  totalExecutions,\n  successfulExecutions,\n  failedExecutions,\n  successRate: Math.round(successRate * 100) / 100,\n  platformBreakdown: platformStats\n};"
+      },
+      "id": "code-aggregate",
+      "name": "Aggregate Statistics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.APP_WEBHOOK_URL }}/api/webhooks/n8n",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "daily_analytics"
+            },
+            {
+              "name": "data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-webhook",
+      "name": "Send to App Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [910, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Executions": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Statistics": {
+      "main": [
+        [
+          {
+            "node": "Send to App Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "tags": ["analytics", "automation"]
+}

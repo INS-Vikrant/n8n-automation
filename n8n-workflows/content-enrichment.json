@@ -1,0 +1,148 @@
+{
+  "name": "Content Enrichment Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-enrich",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twittertrends.com/v1/trending",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "topic",
+              "value": "={{ $json.topic }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-request-1",
+      "name": "Fetch Trending Hashtags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $input.first().json.content;\nconst words = content.split(' ').length;\nconst sentences = content.split('.').length;\nconst avgWordsPerSentence = words / sentences;\n\nlet readabilityScore = 0;\nif (avgWordsPerSentence < 15) {\n  readabilityScore = 90;\n} else if (avgWordsPerSentence < 20) {\n  readabilityScore = 70;\n} else {\n  readabilityScore = 50;\n}\n\nreturn {\n  readabilityScore,\n  wordCount: words,\n  sentenceCount: sentences\n};"
+      },
+      "id": "code-1",
+      "name": "Calculate Readability",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "enrichedContent",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $json.platform }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "readabilityScore",
+              "value": "={{ $json.readabilityScore }}"
+            },
+            {
+              "name": "wordCount",
+              "value": "={{ $json.wordCount }}"
+            }
+          ],
+          "array": [
+            {
+              "name": "hashtags",
+              "value": "={{ $json.hashtags }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Trending Hashtags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Trending Hashtags": {
+      "main": [
+        [
+          {
+            "node": "Calculate Readability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Readability": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "tags": ["social-media", "content"]
+}
